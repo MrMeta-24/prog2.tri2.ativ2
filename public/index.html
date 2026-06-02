@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang='pt-BR'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>To-Do List</title>
+  <link rel='stylesheet' href='main.css'>
+  <script type="module" src="./main.js"></script>
+</head>
+<body>
+  <header></header>
+  <main id="app">
+    <div id="input-container">
+      <input type="text" id="task-input" placeholder="Enter a new task">
+      <button id="add-button">Add Task</button>
+    </div>
+    <ul id="list">
+      <template>
+        <li>
+          <span class="title">title</span>
+          <button class="bt-delete">Delete</button>
+          <button class="bt-edit">Edit</button>
+        </li>
+      </template>
+    </ul>
+  </main>
+  <footer class="footer">
+    <p>© 2026 — Desenvolvido por @MrMeta-24</p>
+  </footer>
+</body>
+</html>

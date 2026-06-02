@@ -1,0 +1,146 @@
+/*import { Database } from "bun:sqlite";
+
+const db = new Database("database.sqlite");
+const query = db.query("select 'Hello world' as message;");
+query.get();
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL
+  );
+`);
+
+const itemInsert = db.query("INSERT INTO items(title) VALUES(?)");
+const itemSelectAll = db.query("SELECT * FROM items");
+const itemUpdate = db.query("UPDATE items SET title = ? WHERE id = ?");
+const itemRemove = db.query("DELETE FROM items WHERE id = ?");
+
+export class Item{
+    constructor(public title : string) { } 
+}
+
+
+export class TodoList {
+    private items: Item [] = []
+
+    addItems(item: Item) {
+        this.items.push(item)
+        itemInsert.run(item.title)
+    }
+
+    getItems(){
+        return itemSelectAll.all()
+        // return [ ...this.items]
+    }
+
+    updateItems(index: number, newItem: string){
+        if (index >= 0 && index < this.items.length) {
+            this.items[index].title = newItem;
+        }
+        itemUpdate.run(newItem, index)
+    }
+
+    deleteItems(index: number) {
+        const removedItem = this.items[index];
+        if (removedItem){
+            this.items.splice(index,1);
+        }
+        itemRemove.run(index)
+    }
+}
+
+ 
+export const minhaLista = new TodoList();
+
+
+// ADD
+// const itemx = new Item("Estudar Bun.js")
+// minhaLista.addItems(itemx);
+// minhaLista.addItems(new Item("Comprar café"));
+
+// Get
+// console.log("Itens criados:", minhaLista.getItems());
+
+// Update
+// minhaLista.updateItems(1, "Estudar Bun.js e SQLite");
+// console.log("Após atualização:", minhaLista.getItems());
+// itemx.setTitle("askjhsaxkjfd")
+
+
+
+// Delete
+// minhaLista.deleteItems(2);
+// console.log("Após deleção:", minhaLista.getItems());
+itemx.delete()
+ minhaLista.deleteItems(itemx);
+
+*/
+
+import { Database } from "bun:sqlite";
+
+const db = new Database("database.sqlite");
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL
+  );
+`);
+
+const itemInsert = db.query("INSERT INTO items(title) VALUES(?)");
+const itemSelectAll = db.query("SELECT * FROM items");
+const itemUpdate = db.query("UPDATE items SET title = ? WHERE id = ?");
+const itemRemove = db.query("DELETE FROM items WHERE id = ?");
+
+// export class Item {
+//     constructor(
+//         public id: number,
+//         public title: string
+//     ) {}
+// }
+
+// export class TodoList {
+
+//     addItem(title: string) {
+//         itemInsert.run(title);
+//     }
+
+//     getItems(): Item[] {
+//         const rows = itemSelectAll.all() as {
+//             id: number;
+//             title: string;
+//         }[];
+
+//         return rows.map(
+//             row => new Item(row.id, row.title)
+//         );
+//     }
+
+//     updateItem(id: number, newTitle: string) {
+//         itemUpdate.run(newTitle, id);
+//     }
+
+//     deleteItem(id: number) {
+//         itemRemove.run(id);
+//     }
+// }
+
+// export const minhaLista = new TodoList();
+
+// //TESTES
+
+// // CREATE
+// //minhaLista.addItem("Estudar Bun.js");
+// //minhaLista.addItem("Comprar café");
+
+// // READ
+// //console.log(minhaLista.getItems());
+
+// // UPDATE
+// //minhaLista.updateItem(1, "Estudar Bun.js e SQLite");
+// //console.log(minhaLista.getItems());
+
+// // DELETE
+// //minhaLista.deleteItem(2);
+// //console.log(minhaLista.getItems());
