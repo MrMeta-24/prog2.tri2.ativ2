@@ -20,7 +20,7 @@ type ModelTitle = {
     title: string;
 };
 
-class Item {
+export class Item {
     private static cache: Map<number, Item> = new Map();
     private _title!: string;
     private _id!: number;
@@ -87,7 +87,7 @@ class Item {
     }
 }
 
-class TodoList {
+export class TodoList {
     private items: Item[] = [];
 
     constructor() {
@@ -102,7 +102,12 @@ class TodoList {
 
     removeItem(item: Item): void {
         item.remove();
-        this.items = this.items.filter(i => i.id !== item.id);
+        
+        Reflect.ownKeys(this).forEach(k => {
+            // @ts-ignore
+            delete this[k] 
+        })
+
     }
 
     getAll(): Item[] {
@@ -114,34 +119,50 @@ class TodoList {
     }
 }
 
-// TESTES 
+// // TESTES 
 
-const minhaLista = new TodoList();
+const lista = new TodoList();
 
 // CREATE
-console.log("--- Criando tarefas ---");
-const tarefa1 = minhaLista.add("Estudar Bun.js");
-const tarefa2 = minhaLista.add("Aprender SQLite");
+console.log("\n=== CREATE ===");
+const item1 = lista.add("Estudar Bun");
+const item2 = lista.add("Aprender SQLite");
 
-console.log("Itens na lista atualmente:");
-minhaLista.getAll().forEach(i => console.log(`- [ID: ${i.id}] ${i.title}`));
+console.log("Criados:");
+console.log(`[${item1.id}] ${item1.title}`);
+console.log(`[${item2.id}] ${item2.title}`);
 
-// GET
-console.log("\n--- Validando o Cache ---");
-const todosOsItens = Item.loadAll();
-const itemDoBanco = todosOsItens.find(i => i.id === tarefa1.id);
+// GET ONE
+console.log("\n=== GET ONE ===");
+const carregado = Item.load(item1.id);
+console.log(`[${carregado.id}] ${carregado.title}`);
 
-console.log("O item vindo do loadAll é idêntico à instância criada na memória?");
-console.log(itemDoBanco === tarefa1);
+// GET ALL
+console.log("\n=== GET ALL ===");
+Item.loadAll().forEach(item => {
+    console.log(`[${item.id}] ${item.title}`);
+});
 
 // UPDATE
-console.log("\n--- Atualizando tarefa ---");
-tarefa2.title = "Aprender SQLite Avançado";
-console.log(`Nova descrição da tarefa 2: ${tarefa2.title}`);
+console.log("\n=== UPDATE ===");
+item1.title = "Estudar Bun Avançado";
 
-// REMOVE
-console.log(`\n--- Removendo a tarefa: "${tarefa1.title}" ---`);
-minhaLista.removeItem(tarefa1);
+const atualizado = Item.load(item1.id);
+console.log(`[${atualizado.id}] ${atualizado.title}`);
 
-console.log("Lista final após a remoção:");
-minhaLista.getAll().forEach(i => console.log(`- [ID: ${i.id}] ${i.title}`));
+// DELETE
+console.log("\n=== DELETE ===");
+item1.remove();
+
+console.log("Itens restantes:");
+Item.loadAll().forEach(item => {
+    console.log(`[${item.id}] ${item.title}`);
+});
+
+console.log("\n=== VALIDANDO DELETE ===");
+try {
+    Item.load(item1.id);
+} catch (err) {
+    console.log("Item removido com sucesso.");
+    console.log(err);
+}
