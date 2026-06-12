@@ -282,6 +282,8 @@ bun --version
 ### Rodando o projeto
 
 ```bash
+// No terminal coloque as seguintes linhas separadmente
+bun i //caso não não tenha node models
 cd src
 bun run core.ts
 ```
