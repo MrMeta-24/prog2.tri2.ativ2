@@ -1,298 +1,318 @@
 # prog2.tri2.ativ1
 
+# TodoList com Bun + SQLite
 
-# Estrutura do código
+Um sistema simples de lista de tarefas (Todo List) implementado em TypeScript usando **Bun** como runtime e **SQLite** como banco de dados, com cache em memória para evitar consultas desnecessárias.
 
-## Importação do SQLite
+---
+---
+
+## Como Funciona — Passo a Passo
+
+### 1. Conexão com o Banco de Dados
 
 ```ts
 import { Database } from "bun:sqlite";
-```
 
-Aqui estamos importando o módulo SQLite nativo do Bun.
-
----
-
-## Criando conexão com o banco
-
-```ts
 const db = new Database("database.sqlite");
 ```
 
-Cria (ou abre) um banco SQLite chamado:
-
-```bash
-database.sqlite
-```
+O Bun possui um driver SQLite nativo (`bun:sqlite`), sem precisar instalar nenhuma dependência externa. Se o arquivo `database.sqlite` não existir, ele é criado automaticamente.
 
 ---
 
-## Teste de conexão
-
-```ts
-const query = db.query("select 'Hello world' as message;");
-query.get();
-```
-
-Executa uma query simples apenas para testar se o banco está funcionando.
-
----
-
-# Criando a tabela
+### 2. Criação da Tabela
 
 ```ts
 db.run(`
   CREATE TABLE IF NOT EXISTS items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id    INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL
   );
 `);
 ```
 
-Essa query cria a tabela `items` caso ela ainda não exista.
+Cria a tabela `items` caso ela ainda não exista. Cada item tem:
+- `id` — chave primária gerada automaticamente pelo banco
+- `title` — texto obrigatório com o nome da tarefa
 
 ---
 
-# Queries preparadas
-
-## Inserir item
+### 3. Queries Preparadas
 
 ```ts
-const itemInsert = db.query("INSERT INTO items(title) VALUES(?)");
+const itemInsert      = db.query("INSERT INTO items(title) VALUES(?)");
+const itemSelectAll   = db.query("SELECT * FROM items");
+const itemSelectOne   = db.query("SELECT * FROM items WHERE id = ? LIMIT 1");
+const itemUpdateTitle = db.query("UPDATE items SET title = ? WHERE id = ?");
+const itemRemove      = db.query("DELETE FROM items WHERE id = ?");
 ```
 
+As queries são preparadas uma única vez no início do programa. Isso é mais eficiente do que montar strings SQL a cada operação, pois o banco já compila e valida a query antecipadamente. Os `?` são parâmetros que serão substituídos na hora da execução, protegendo contra SQL Injection.
+
 ---
 
-## Buscar todos os itens
+### 4. Tipo auxiliar
 
 ```ts
-const itemSelectAll = db.query("SELECT * FROM items");
+type ModelTitle = {
+  id: number;
+  title: string;
+};
 ```
 
+Define a forma dos dados que vêm do banco de dados, usada para fazer o cast dos resultados das queries e garantir tipagem correta no TypeScript.
+
 ---
 
-## Atualizar item
+### 5. Classe `Item`
+
+Representa uma tarefa individual. É o coração do sistema — toda leitura e escrita no banco passa por ela.
+
+#### Cache em memória
 
 ```ts
-const itemUpdate = db.query("UPDATE items SET title = ? WHERE id = ?");
+private static cache: Map<number, Item> = new Map();
 ```
 
----
+Um `Map` estático que guarda as instâncias já carregadas, indexadas pelo `id`. Quando um item é solicitado, o código verifica o cache primeiro antes de ir ao banco — evitando consultas repetidas.
 
-## Remover item
+#### Construtor privado
 
 ```ts
-const itemRemove = db.query("DELETE FROM items WHERE id = ?");
+private constructor() {}
 ```
 
+Impede que instâncias sejam criadas com `new Item()` de fora da classe. Toda criação passa pelos métodos estáticos abaixo, garantindo que o cache seja sempre mantido atualizado.
+
 ---
 
-# Classe Item
+#### `Item.create(title)` — Inserir
 
 ```ts
-export class Item{
-    constructor(public title : string){}
+static create(title: string): Item {
+  const instance = new Item();
+  instance._title = title;
+  const resp = itemInsert.run(title);        // executa o INSERT no banco
+  instance._id = resp.lastInsertRowid as number; // pega o ID gerado
+
+  Item.cache.set(instance._id, instance);    // salva no cache
+  return instance;
 }
 ```
 
-Representa um item da lista.
-
-## Exemplo
-
-```ts
-new Item("Estudar Bun.js")
-```
+Cria um novo item no banco, captura o ID gerado automaticamente pelo SQLite (`lastInsertRowid`) e registra a instância no cache.
 
 ---
 
-# Classe TodoList
+#### `Item.load(id)` — Buscar por ID
+
+```ts
+static load(id: number): Item {
+  if (Item.cache.has(id)) {
+    return Item.cache.get(id)!; // retorna do cache se já existir
+  }
+  const resp = itemSelectOne.get(id) as ModelTitle;
+  if (!resp) {
+    throw `Impossível carregar o Item de id ${id} do banco de dados`;
+  }
+  const instance = new Item();
+  instance._title = resp.title;
+  instance._id = resp.id;
+  Item.cache.set(id, instance); // salva no cache para próximas consultas
+  return instance;
+}
+```
+
+Verifica o cache antes de ir ao banco. Se o item não existir nem no banco, lança um erro informativo. Caso encontre, popula o cache para evitar futuras consultas.
+
+---
+
+#### `Item.loadAll()` — Buscar todos
+
+```ts
+static loadAll(): Item[] {
+  const rows = itemSelectAll.all() as ModelTitle[];
+
+  return rows.map(row => {
+    if (Item.cache.has(row.id)) {
+      return Item.cache.get(row.id)!; // reutiliza instância do cache
+    }
+    const instance = new Item();
+    instance._title = row.title;
+    instance._id = row.id;
+    Item.cache.set(row.id, instance);
+    return instance;
+  });
+}
+```
+
+Carrega todos os registros do banco. Para cada linha, reutiliza a instância do cache se já existir, ou cria uma nova e a adiciona ao cache.
+
+---
+
+#### `item.remove()` — Remover
+
+```ts
+remove() {
+  itemRemove.run(this._id);       // deleta do banco
+  Item.cache.delete(this._id);   // remove do cache
+}
+```
+
+Remove o item tanto do banco de dados quanto do cache em memória, garantindo consistência entre os dois.
+
+---
+
+#### `get/set title` — Ler e atualizar o título
+
+```ts
+set title(newTitle: string) {
+  itemUpdateTitle.run(newTitle, this._id); // atualiza no banco
+  this._title = newTitle;                  // atualiza na instância
+}
+
+get title() {
+  return this._title;
+}
+```
+
+O `setter` de `title` sincroniza a mudança tanto na instância em memória quanto no banco de dados. O `getter` retorna o valor já em memória, sem precisar ir ao banco.
+
+---
+
+### 6. Classe `TodoList`
+
+Gerencia a coleção de itens e serve como interface de alto nível para o usuário do código.
 
 ```ts
 export class TodoList {
-```
+  private items: Item[] = [];
 
-Responsável por gerenciar os itens.
-
----
-
-# Adicionar itens
-
-```ts
-addItems(item: Item) {
-    this.items.push(item)
-    itemInsert.run(item.title)
+  constructor() {
+    this.items = Item.loadAll(); // carrega todos os itens ao iniciar
+  }
+  ...
 }
 ```
 
-## O que acontece?
-
-1. Adiciona o item no array local
-2. Salva o item no banco SQLite
-
-## Exemplo
-
-```ts
-minhaLista.addItems(new Item("Comprar café"));
-```
+Ao ser instanciada, já carrega todos os itens existentes no banco.
 
 ---
 
-# Listar itens
+#### `add(title)` — Adicionar tarefa
 
 ```ts
-getItems(){
-    return itemSelectAll.all()
+add(title: string): Item {
+  const newItem = Item.create(title); // cria no banco
+  this.items.push(newItem);           // adiciona à lista local
+  return newItem;
 }
 ```
 
-Retorna todos os itens cadastrados no banco.
-
-## Exemplo
-
-```ts
-console.log(minhaLista.getItems());
-```
+Cria o item no banco via `Item.create` e o adiciona ao array interno.
 
 ---
 
-# Atualizar item
+#### `removeItem(item)` — Remover tarefa
 
 ```ts
-updateItems(index: number, newItem: string){
-    if (index >= 0 && index < this.items.length) {
-        this.items[index].title = newItem;
-    }
-    itemUpdate.run(newItem, index)
+removeItem(item: Item): void {
+  item.remove(); // remove do banco e do cache
+
+  // deleta todas as propriedades do objeto TodoList
+  Reflect.ownKeys(this).forEach(k => {
+    // @ts-ignore
+    delete this[k];
+  });
 }
 ```
 
-Atualiza o título de um item.
-
-## Exemplo
-
-```ts
-minhaLista.updateItems(1, "Estudar Bun.js e SQLite");
-```
+Remove o item do banco e depois usa `Reflect.ownKeys` para apagar todas as propriedades da instância `TodoList`, efetivamente "invalidando" o objeto. Isso força o código que usar essa lista a chamar `reload()` antes de continuar.
 
 ---
 
-# Remover item
+#### `getAll()` e `reload()`
 
 ```ts
-deleteItems(index: number) {
-    const removedItem = this.items[index];
-    if (removedItem){
-        this.items.splice(index,1);
-    }
-    itemRemove.run(index)
+getAll(): Item[] {
+  return this.items;
+}
+
+reload(): void {
+  this.items = Item.loadAll(); // sincroniza com o banco
 }
 ```
 
-Remove um item da lista e do banco.
+`getAll()` retorna os itens em memória. `reload()` vai ao banco buscar o estado mais recente — útil após operações externas que possam ter alterado os dados.
 
-## Exemplo
+---
 
-```ts
-minhaLista.deleteItems(2);
+### 7. Testes no final do arquivo
+
+O código inclui uma sequência de testes que demonstra o CRUD completo:
+
+```
+CREATE      → Adiciona "Estudar Bun" e "Aprender SQLite"
+GET ONE     → Carrega um item pelo ID (vem do cache, sem nova query)
+GET ALL     → Lista todos os itens do banco
+UPDATE      → Atualiza o título de "Estudar Bun" para "Estudar Bun Avançado"
+DELETE      → Remove o item1 do banco e do cache
+VALIDAÇÃO   → Tenta carregar o item removido e confirma que lança erro
 ```
 
 ---
 
-# Instância da lista
+##  Como Executar
 
-```ts
-export const minhaLista = new TodoList();
-```
+### Pré-requisitos
 
-Cria uma instância pronta para uso.
-
----
-
-# ▶Como executar o projeto
-
-## 1. Instalar o Bun
-
-Caso ainda não tenha:
+Instale o **Bun** (caso ainda não tenha):
 
 ```bash
 curl -fsSL https://bun.sh/install | bash
 ```
 
----
-
-## 2. Criar o projeto
+Verifique a instalação:
 
 ```bash
-bun init
+bun --version
 ```
 
----
-
-## 3. Salvar o código
-
-Exemplo:
+### Rodando o projeto
 
 ```bash
-src/index.ts
+cd src
+bun run core.ts
 ```
 
----
+O arquivo `database.sqlite` será criado automaticamente na primeira execução.
 
-## 4. Executar
+### Saída esperada
 
-```bash
-bun run src/index.ts
 ```
+=== CREATE ===
+Criados:
+[1] Estudar Bun
+[2] Aprender SQLite
 
----
+=== GET ONE ===
+[1] Estudar Bun
 
-# Exemplo completo de uso
+=== GET ALL ===
+[1] Estudar Bun
+[2] Aprender SQLite
 
-```ts
-import { minhaLista, Item } from "./index";
+=== UPDATE ===
+[1] Estudar Bun Avançado
 
-// Adicionar
-minhaLista.addItems(new Item("Estudar Bun.js"));
-minhaLista.addItems(new Item("Comprar café"));
+=== DELETE ===
+Itens restantes:
+[2] Aprender SQLite
 
-// Listar
-console.log("Itens criados:");
-console.log(minhaLista.getItems());
-
-// Atualizar
-minhaLista.updateItems(1, "Estudar Bun.js e SQLite");
-
-console.log("Após atualização:");
-console.log(minhaLista.getItems());
-
-// Deletar
-minhaLista.deleteItems(2);
-
-console.log("Após deleção:");
-console.log(minhaLista.getItems());
+=== VALIDANDO DELETE ===
+Item removido com sucesso.
+Impossível carregar o Item de id 1 do banco de dados
 ```
-
 ---
 
-# Resultado esperado
-
-```bash
-Itens criados:
-[
-  { id: 1, title: 'Estudar Bun.js' },
-  { id: 2, title: 'Comprar café' }
-]
-
-Após atualização:
-[
-  { id: 1, title: 'Estudar Bun.js e SQLite' },
-  { id: 2, title: 'Comprar café' }
-]
-
-Após deleção:
-[
-  { id: 1, title: 'Estudar Bun.js e SQLite' }
-]
-```
-
----
