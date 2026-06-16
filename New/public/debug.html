@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debugger</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    h2 {
+      padding: 0;
+      margin: 0;
+    }
+
+    body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      height: 100vh;
+      margin: 0;
+      gap: 1rem;
+      padding: 1rem;
+
+      &>div {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+
+        flex-grow: 1;
+        border: 2px solid;
+        padding: 1rem;
+
+        &>:has(label) {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+
+          label {
+            display: block;
+          }
+
+        }
+      }
+
+      .request {
+        &>:has(#request-url) {
+          display: flex;
+          border: 1px solid;
+
+          * {
+            border: 0 none
+          }
+
+          input {
+            flex-grow: 1;
+          }
+
+          select {
+            background-color: azure;
+          }
+        }
+
+        >:has(label) {
+
+          input,
+          textarea {
+            flex-grow: 1;
+          }
+        }
+
+        >:has(#request-error:empty) {
+          display: none;
+        }
+
+        >:has(#request-error) {
+          background-color: lightblue;
+          padding: .25rem;
+        }
+      }
+
+      .response {
+        &>:has(#response-path) {
+          display: flex;
+          gap: .25rem;
+
+          #response-path {
+            flex-grow: 1;
+          }
+
+          #response-status-code,
+          #response-status-text {
+            border: 1px solid;
+            padding: .1rem .25rem;
+          }
+        }
+
+        &>:has(label) {
+          pre {
+            background-color: #EDEDED;
+            flex-grow: 1;
+            padding: 1rem;
+            margin: 0;
+          }
+        }
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="request">
+    <h2>Request</h2>
+    <div>
+      <input id="request-url" placeholder="URI/URL">
+      <select id="request-method">
+        <option>GET</option>
+        <option>POST</option>
+        <option>PATCH</option>
+        <option>PUT</option>
+        <option>DELETE</option>
+        <option>OPTIONS</option>
+      </select>
+      <button id="bt-request">enviar</button>
+    </div>
+    <div>
+      <label for="request-header">Cabeçalhos</label>
+      <textarea id="request-header"></textarea>
+    </div>
+    <div>
+      <label for="request-body">Corpo</label>
+      <textarea id="request-body"></textarea>
+    </div>
+    <div>
+      <label>Error</label>
+      <pre id="request-error"></pre>
+    </div>
+  </div>
+
+  <div class="response">
+    <h2>Response</h2>
+    <div>
+      <span id="response-path">...</span>
+      <span id="response-status-code">...</span>
+      <span id="response-status-text">...</span>
+    </div>
+    <div>
+      <label>Cabeçalhos</label>
+      <pre id="response-header" disabled>...</pre>
+    </div>
+    <div>
+      <label>Corpo</label>
+      <pre id="response-body" disabled>...</pre>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as monacoEditor from 'https://esm.run/monaco-editor';
+    function applyEditor(el) { 
+      return monacoEditor.editor.create(el, {
+        value: '',
+        language: 'json',
+        theme: 'vs-dark' // Pode usar 'vs' (claro) ou 'vs-dark'
+      });
+    }
+    // Elementos DOM para Request
+    const requestUrl = document.querySelector("#request-url")
+    const requestMethod = document.querySelector("#request-method")
+    const requestHeader = document.querySelector("#request-header")
+    const requestBody = (document.querySelector("#request-body"))
+    const requestError = document.querySelector("#request-error")
+    const btRequest = document.querySelector("#bt-request")
+    // Elementos DOM para Response
+    const responsePath = document.querySelector("#response-path")
+    const responseStatusText = document.querySelector("#response-status-text")
+    const responseStatusCode = document.querySelector("#response-status-code")
+    const responseHeader = document.querySelector("#response-header")
+    const responseBody = document.querySelector("#response-body")
+
+    // Format Response Body
+    function formatResponseBody(contentType, bodyText) {
+      if (contentType.includes('application/json'))
+        return JSON.stringify(JSON.parse(bodyText), null, 2)
+      return bodyText
+    }
+
+    // Envia Requisições
+    btRequest.addEventListener('click', async () => {
+      if (requestUrl.value.trim() === '')
+        return
+
+      try {
+        const response = await fetch(requestUrl.value, {
+          method: requestMethod.value,
+          headers: requestHeader.value.trim() === ''
+            ? undefined
+            : JSON.parse(requestHeader.value),
+          body: requestBody.value.trim() === ''
+            ? undefined
+            : requestBody.value
+        })
+        //
+        responsePath.textContent = response.url
+        responseStatusText.textContent = response.statusText
+        responseStatusCode.textContent = response.status
+        responseHeader.textContent = [...response.headers].map(([key, val]) => `${key}: ${val}`).join('\n')
+        // 
+        const contentType = response.headers.get('content-type')
+        const bodyText = await response.text()
+        responseBody.textContent = formatResponseBody(contentType, bodyText)
+      } catch (e) {
+        console.error(e)
+        requestError.textContent = e
+      }
+    })
+  </script>
+</body>
+
+</html>
